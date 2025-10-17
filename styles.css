@@ -1,0 +1,84 @@
+/* ---------------------------------------------------- */
+/* CREDIBLE - GLOBAL STYLES & FIXES */
+/* ---------------------------------------------------- */
+
+.credible-tag {
+    /* AGGRESSIVE FIXES (Mirroring & Rotation) */
+    direction: ltr !important; 
+    unicode-bidi: plaintext !important; 
+    text-align: left !important;
+    
+    /* 💥 FINAL FIX: COUNTER-TRANSFORM 💥 */
+    /* This rotation (180deg on X and Y axes) reverses the external mirroring/flipping. */
+    transform: rotateX(180deg) !important; /* ONLY vertical flip (upside down) */
+
+    /* Box Model & Positioning */
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px; /* Enhanced padding for a better badge look */
+    margin-left: 12px;
+    border-radius: 6px;
+    
+    /* Typography */
+    font-family: Arial, Helvetica, sans-serif !important; 
+    font-size: 12px !important; 
+    font-weight: 800; 
+    color: #ffffff; 
+    text-transform: uppercase;
+    line-height: 1.2;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+    
+    /* Aesthetics & Interactivity */
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); /* Darker shadow for better pop */
+    
+    /* Update transition property to handle the transform */
+    transition: transform 0.2s, opacity 0.2s; 
+    
+    /* Z-Index ensures the tag is always visible */
+    z-index: 9999; 
+    gap: 5px; /* Spacing for icon and text */
+}
+
+/* FIX: Target ALL inner elements inside the tag (The text inside the <bdi> tag) */
+.credible-tag * {
+    direction: ltr !important;
+    unicode-bidi: unset !important;
+}
+
+.credible-tag:hover {
+    /* Adjust the hover transform to keep the counter-rotation intact while lifting */
+    transform: rotateX(180deg) translateY(-2px) !important; /* Flip vertically and apply hover lift */
+    opacity: 0.95;
+}
+
+/* ---------------------------------------------------- */
+/* STATUS COLORS & ICONS */
+/* ---------------------------------------------------- */
+
+/* Green/Verified: For claims rated TRUE, or official verdict found (e.g., 'CLAIM RATED FALSE') */
+.tag-verified {
+    background-color: #10b981; 
+    border: 1px solid #068c62;
+}
+
+/* Orange/Satire/Bias: For domains known for humor or heavy opinion/partisan bias */
+.tag-satire {
+    background-color: #fb923c; 
+    border: 1px solid #d97706;
+}
+
+/* Red/Bad: For extreme propaganda or known fake news domains (from your list) */
+.tag-bad {
+    background-color: #ef4444; 
+    border: 1px solid #b91c1c;
+}
+
+/* Gray/Neutral: The default for unassessed links */
+.tag-neutral {
+    background-color: #94a3b8; 
+    border: 1px solid #64748b;
+    color: #333; 
+    box-shadow: none;
+}
