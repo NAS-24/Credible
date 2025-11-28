@@ -2,149 +2,133 @@
 console.log("Credible Content Script Loaded!");
 
 // --- 1. CONFIGURATION ---
-const BACKEND_ENDPOINT = "https://credible-38kn.onrender.com/api/check-credibility/";
-const CACHED_LINKS = new Map(); // Map to store link elements for quick injection
+// 💥 FIX 1: Define the Base Host URL (must end with a slash for safety)
+const BASE_HOST_URL = "https://credible-38kn.onrender.com/"; 
+// 💥 FIX 2: Define the API Endpoint Path
+const API_PATH = "api/check-credibility/"; 
+const CACHED_LINKS = new Map(); 
 
 // Function to extract the user's search query from the URL bar (e.g., from ?q=...)
 function getUserSearchQuery() {
-  try {
-    const urlParams = new URLSearchParams(window.location.search);
-    // Google uses 'q' parameter for the query
-    const query = urlParams.get("q");
-    // Decode the URL characters (like changing '+' to ' ' or '%20')
-    return query ? decodeURIComponent(query.replace(/\+/g, " ")) : null;
-  } catch (e) {
-    console.error("Could not extract search query from URL:", e);
-    return null;
-  }
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const query = urlParams.get("q");
+        return query ? decodeURIComponent(query.replace(/\+/g, " ")) : null;
+    } catch (e) {
+        console.error("Could not extract search query from URL:", e);
+        return null;
+    }
 }
 
 // --- 2. Main Execution Function ---
-window.onload = function () {
-  // 2a. Extract User Query FIRST
-  const userQuery = getUserSearchQuery();
-  console.log(`User Query Extracted: ${userQuery || "N/A"}`);
+window.onload = function() {
+    const userQuery = getUserSearchQuery();
+    console.log(`User Query Extracted: ${userQuery || "N/A"}`);
 
-  console.log("Page has loaded. Starting link extraction...");
+    console.log("Page has loaded. Starting link extraction...");
 
-  // 2b. Data Extraction: Find ALL result links on the page.
-  const linkElements = document.querySelectorAll("a:has(h3)");
-  let searchResults = [];
+    const linkElements = document.querySelectorAll('a:has(h3)'); 
+    let searchResults = [];
+    
+    linkElements.forEach(link => {
+        const url = link.href;
+        if (url && url.startsWith("http")) {
+            try {
+                const domain = new URL(url).hostname;
+                const uniqueKey = url;
 
-  linkElements.forEach((link) => {
-    const url = link.href;
-    if (url && url.startsWith("http")) {
-      try {
-        const domain = new URL(url).hostname;
-        const uniqueKey = url;
+                searchResults.push({ url: url, domain: domain });
+                CACHED_LINKS.set(uniqueKey, link); 
 
-        searchResults.push({ url: url, domain: domain });
-        // Cache the element using its URL as the unique key
-        CACHED_LINKS.set(uniqueKey, link);
-      } catch (e) {
-        // Ignore invalid URLs
-      }
-    }
-  });
-
-  console.log(`Found ${searchResults.length} potential search results.`);
-
-  if (searchResults.length > 0) {
-    // 2c. Send data to the Python Backend
-    sendDataToBackend(searchResults, userQuery);
-  }
-};
-
-// --- 3. Communication Function ---
-// Now sends a combined payload (links + single query)
-async function sendDataToBackend(data, userQuery) {
-  try {
-    console.log(
-      `[FRONTEND] Sending ${data.length} items to backend at ${BACKEND_ENDPOINT}...`
-    );
-
-    // Build the combined payload that matches the FastAPI Pydantic model
-    const payload = {
-      links: data,
-      query: userQuery,
-    };
-
-    const response = await fetch(BACKEND_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload), // Send the combined object
+            } catch (e) {
+                // Ignore invalid URLs
+            }
+        }
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+    console.log(`Found ${searchResults.length} potential search results.`);
+    
+    if (searchResults.length > 0) {
+        sendDataToBackend(searchResults, userQuery);
     }
+};
 
-    const verdicts = await response.json();
+// --- 3. Communication Function (UPDATED FETCH) ---
+async function sendDataToBackend(data, userQuery) {
+    // Construct the full URL using the components
+    const FULL_API_ENDPOINT = BASE_HOST_URL + API_PATH; 
+    
+    try {
+        console.log(`[FRONTEND] Sending ${data.length} items to backend at ${FULL_API_ENDPOINT}...`);
+        
+        // Build the combined payload that matches the FastAPI Pydantic model
+        const payload = {
+            links: data,
+            query: userQuery,
+        };
 
-    console.log("-----------------------------------------");
-    console.log(`[FRONTEND] SUCCESS! Received ${verdicts.length} verdicts.`);
-    console.log("FULL VERDICTS ARRAY:", verdicts);
+        const response = await fetch(FULL_API_ENDPOINT, { 
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
 
-    // Phase 3: Display the Tags
-    injectVerdictsIntoPage(verdicts);
-  } catch (error) {
-    console.error(
-      "[FRONTEND] Error communicating with backend. Is the FastAPI server running?",
-      error
-    );
-  }
+        if (!response.ok) {
+             // This will catch the 404 if the path is wrong, or 503 if the server is asleep
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const verdicts = await response.json();
+        
+        console.log("-----------------------------------------");
+        console.log(`[FRONTEND] SUCCESS! Received ${verdicts.length} verdicts.`);
+        console.log("FULL VERDICTS ARRAY:", verdicts);
+        
+        injectVerdictsIntoPage(verdicts); 
+
+    } catch (error) {
+        console.error(
+          "[FRONTEND] Error communicating with backend. Connection failed or HTTP status error.",
+          error
+        );
+    }
 }
 
-// --- 4. RENDERING LOGIC (Phase 3 Complete) ---
+// --- 4. RENDERING LOGIC (Phase 3) ---
 function injectVerdictsIntoPage(verdicts) {
-  let injectedCount = 0;
+    let injectedCount = 0;
 
-  verdicts.forEach((verdict) => {
-    // Retrieve the link element we cached earlier using the URL
-    const linkElement = CACHED_LINKS.get(verdict.url);
+    verdicts.forEach(verdict => {
+        const linkElement = CACHED_LINKS.get(verdict.url);
+        
+        if (linkElement && verdict.label) {
+            
+            // FIX: Using <bdi> to solve the text mirroring issue
+            const tag = document.createElement("span");
+            const bdiElement = document.createElement("bdi"); 
+            bdiElement.textContent = verdict.label;
+            tag.appendChild(bdiElement); 
+            
+            // --- Determine the CSS Class based on verdict status ---
+            let tagClass = "tag-neutral"; 
 
-    if (linkElement && verdict.label) {
-      // ** START FIX FOR MIRRORING **
-      const tag = document.createElement("span");
-      // Create the Bidirectional Isolation element
-      const bdiElement = document.createElement("bdi");
-      bdiElement.textContent = verdict.label;
+            if (verdict.verdict.includes("Fact Checked CLAIM")) {
+                tagClass = "tag-verified"; 
+            } else if (verdict.verdict.includes("Satire") || verdict.verdict.includes("Humor")) {
+                tagClass = "tag-satire";
+            } else if (verdict.verdict.includes("Bias") || verdict.verdict.includes("Propaganda") || verdict.verdict.includes("Fake")) {
+                tagClass = "tag-bad";
+            }
 
-      // Append the isolated text element to the span tag
-      tag.appendChild(bdiElement);
-      // ** END FIX FOR MIRRORING **
-
-      // --- Determine the CSS Class based on verdict status ---
-      let tagClass = "tag-neutral"; // Default: Unassessed
-
-      if (verdict.verdict.includes("Fact Checked CLAIM")) {
-        tagClass = "tag-verified";
-      } else if (
-        verdict.verdict.includes("Satire") ||
-        verdict.verdict.includes("Humor")
-      ) {
-        tagClass = "tag-satire";
-      } else if (
-        verdict.verdict.includes("Bias") ||
-        verdict.verdict.includes("Propaganda") ||
-        verdict.verdict.includes("Fake")
-      ) {
-        tagClass = "tag-bad";
-      }
-
-      tag.className = `credible-tag ${tagClass}`;
-
-      const injectionPoint = linkElement.querySelector("h3");
-
-      if (injectionPoint) {
-        injectionPoint.after(tag);
-        injectedCount++;
-      }
-    }
-  });
-  console.log(
-    `[FRONTEND] Injected ${injectedCount} credibility tags into the search results.`
-  );
+            tag.className = `credible-tag ${tagClass}`;
+            
+            const injectionPoint = linkElement.querySelector("h3");
+            
+            if (injectionPoint) {
+                injectionPoint.after(tag);
+                injectedCount++;
+            }
+        }
+    });
+    console.log(`[FRONTEND] Injected ${injectedCount} credibility tags into the search results.`);
 }
-
-
