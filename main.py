@@ -32,6 +32,13 @@ class CredibilityPayload(BaseModel):
 # --- 1. FastAPI App Initialization & Config ---
 app = FastAPI(title="Credible MVP Backend")
 
+# 💥 ENDPOINT ADDED FOR RENDER HEALTH CHECK 💥
+# Render pings the root path (/), so this prevents a 404 error
+@app.get("/")
+def read_root():
+    """Simple health check endpoint."""
+    return {"status": "OK", "service": "Credible Backend Running", "version": "MVP"}
+
 # Get API Key securely from the .env file
 API_KEY = config('GOOGLE_FACT_CHECK_API_KEY', default='YOUR_FALLBACK_KEY')
 FACT_CHECK_URL = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
@@ -44,7 +51,7 @@ origins = [
     "https://www.google.com",
     "https://*.google.com",    
     "chrome-extension://*",    
-    "https://credible-38kn.onrender.com" # ADD RENDER URL FOR FULL SAFETY
+    "https://credible-38kn.onrender.com" 
 ]
 
 app.add_middleware(
@@ -131,4 +138,5 @@ async def check_credibility(payload: CredibilityPayload):
 
 # --- 4. Server Start (Render ignores this block, but we keep it for local testing) ---
 if __name__ == "__main__":
+    # NOTE: Render uses its own start command, but this allows for local testing
     uvicorn.run("main:app", host="0.0.0.0", port=8888, reload=False)
