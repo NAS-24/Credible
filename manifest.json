@@ -28,10 +28,10 @@
     
   ],
 
-  "host_permissions": [
-    "https://www.google.com/*",
-    "https://credible-38kn.onrender.com/" 
-    
+   "host_permissions": [
+    "https://*.google.com/*",
+    "https://credible-38kn.onrender.com/*"
   ]
 
 }
+
