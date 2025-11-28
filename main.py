@@ -6,19 +6,20 @@ from urllib.parse import urlparse
 import os, sys
 import httpx 
 from decouple import config 
-from pydantic import BaseModel # For structured data input
+from pydantic import BaseModel # Used for LinkData/CredibilityPayload
 
-# Ensure local modules are findable
-if __name__ != "__main__":
-    # Standard import for production/uvicorn runner
-    from reputation_data import LOW_REPUTATION_DOMAINS 
-else:
-    # Custom import hack for running via `python main.py` for development
+# --- MVP DATA: Restore simple file import ---
+# We assume reputation_data.py is in the same directory as main.py
+try:
+    from .reputation_data import LOW_REPUTATION_DOMAINS 
+except ImportError:
+    # Fallback for local run if running directly (python main.py)
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.append(current_dir)
     from reputation_data import LOW_REPUTATION_DOMAINS 
 
-# --- New Model Definition to receive data from the extension (MUST MATCH FRONTEND) ---
+
+# --- Pydantic Data Models (MUST MATCH FRONTEND) ---
 class LinkData(BaseModel):
     url: str
     domain: str
@@ -27,8 +28,9 @@ class CredibilityPayload(BaseModel):
     links: List[LinkData]
     query: Optional[str] = None # The user's original search term
 
+
 # --- 1. FastAPI App Initialization & Config ---
-app = FastAPI()
+app = FastAPI(title="Credible MVP Backend")
 
 # Get API Key securely from the .env file
 API_KEY = config('GOOGLE_FACT_CHECK_API_KEY', default='YOUR_FALLBACK_KEY')
@@ -37,11 +39,12 @@ FACT_CHECK_URL = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
 
 # --- 2. CORS Configuration (CRITICAL) ---
 origins = [
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
+    "http://127.0.0.1:8888",
+    "http://localhost:8888",
     "https://www.google.com",
     "https://*.google.com",    
     "chrome-extension://*",    
+    "https://credible-38kn.onrender.com" # ADD RENDER URL FOR FULL SAFETY
 ]
 
 app.add_middleware(
@@ -53,28 +56,24 @@ app.add_middleware(
 )
 
 # --- 3. The Core MVP Logic (Combined Domain + API Check) ---
-# NOTE: The input type now uses the Pydantic model CredibilityPayload
 @app.post("/api/check-credibility")
 async def check_credibility(payload: CredibilityPayload): 
     
     response_data = []
-    
-    # Check 1: Fact Check API (Only run once using the user's search query)
     fact_check_verdict = None
     
-    print(f"\n[BACKEND] User Search Query: {payload.query}")
-    
+    # 1. CHECK TIER 2: Fact Check API (Run once using the user's search query)
     if payload.query and API_KEY != 'YOUR_FALLBACK_KEY':
         try:
             async with httpx.AsyncClient() as client:
                 params = {
-                    "query": payload.query, # 💥 FIX: Use the user's query here 💥
+                    "query": payload.query, 
                     "key": API_KEY,
                     "pageSize": 1 
                 }
-                response = await client.get(FACT_CHECK_URL, params=params)
+                # Use a short timeout since this is a critical real-time check
+                response = await client.get(FACT_CHECK_URL, params=params, timeout=5.0)
                 response.raise_for_status() 
-                
                 data = response.json()
                 
                 if data.get('claims'):
@@ -82,28 +81,20 @@ async def check_credibility(payload: CredibilityPayload):
                     rating_text = claim_review.get('textualRating', 'RATED')
                     publisher = claim_review['publisher']['name']
                     
-                    # 💥 FIX: Implement the Ambiguity Solution (Topic Warning) 💥
-                    verdict = f"Fact Checked CLAIM: {rating_text}"
-                    label = f"CLAIM RATED {rating_text.upper()} by {publisher}"
-                    
-                    # Store the result to be applied to all links
+                    # Store the result as a Topic Warning
                     fact_check_verdict = {
-                        "verdict": verdict,
-                        "label": label,
-                        # No need to send the review_url yet, keeping it simple
+                        "verdict": f"Fact Checked CLAIM: {rating_text}",
+                        "label": f"CLAIM RATED {rating_text.upper()} by {publisher}",
                     }
                     print(f"[API CHECK] Match Found: {rating_text} by {publisher}")
-                else:
-                    print("[API CHECK] No direct fact-check found for this exact query.")
 
         except httpx.HTTPStatusError as e:
             print(f"[API Error] Status {e.response.status_code} - Check API access/billing.")
         except Exception:
-            print("[API Error] Could not process API response.")
+            pass # Fail gracefully if API connection times out or fails
 
 
-    # Apply verdicts to ALL links
-    print(f"[BACKEND] Applying checks to {len(payload.links)} links.")
+    # 2. APPLY VERDICTS TO ALL LINKS
     for item in payload.links:
         url = item.url
         domain_root = None
@@ -111,8 +102,7 @@ async def check_credibility(payload: CredibilityPayload):
         label = "No Fact Check Found"
         
         try:
-            domain = urlparse(url).netloc.replace('www.', '')
-            domain_root = domain
+            domain_root = urlparse(url).netloc.replace('www.', '').strip()
         except Exception:
             pass 
 
@@ -121,7 +111,7 @@ async def check_credibility(payload: CredibilityPayload):
             verdict = fact_check_verdict['verdict']
             label = fact_check_verdict['label']
             
-        # --- Priority 2: Domain Reputation List (Only applies if Priority 1 wasn't decisive) ---
+        # --- Priority 2: Domain Reputation List (Only if Priority 1 failed) ---
         elif domain_root and domain_root in LOW_REPUTATION_DOMAINS:
             reputation = LOW_REPUTATION_DOMAINS[domain_root]
             verdict = reputation['verdict']
@@ -139,6 +129,6 @@ async def check_credibility(payload: CredibilityPayload):
     return response_data
 
 
+# --- 4. Server Start (Render ignores this block, but we keep it for local testing) ---
 if __name__ == "__main__":
-    # Use simple command name since it's in the root
     uvicorn.run("main:app", host="0.0.0.0", port=8888, reload=False)
