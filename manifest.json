@@ -29,8 +29,9 @@
   ],
 
   "host_permissions": [
-    "http://localhost:8000/*", 
-    "http://127.0.0.1:8000/*" 
+    "https://www.google.com/*",
+    "https://credible-38kn.onrender.com/" 
     
   ]
+
 }
