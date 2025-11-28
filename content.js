@@ -2,7 +2,7 @@
 console.log("Credible Content Script Loaded!");
 
 // --- 1. CONFIGURATION ---
-const BACKEND_ENDPOINT = "http://127.0.0.1:8000/api/check-credibility";
+const BACKEND_ENDPOINT = "https://credible-38kn.onrender.com/";
 const CACHED_LINKS = new Map(); // Map to store link elements for quick injection
 
 // Function to extract the user's search query from the URL bar (e.g., from ?q=...)
@@ -146,3 +146,4 @@ function injectVerdictsIntoPage(verdicts) {
     `[FRONTEND] Injected ${injectedCount} credibility tags into the search results.`
   );
 }
+
